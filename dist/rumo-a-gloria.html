@@ -757,6 +757,50 @@ const Kick = {
         .map(([k, v]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${v}</option>`).join('')}</select></label>`;
   },
 
+  CR: 70, // raio da bola grande
+
+  // estado da bola grande no momento do toque, conforme ela chega
+  contactBall(kind, bounce) {
+    const W = Kick.W, ground = Kick.H - 70;
+    if (kind === 'rasteira') {
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      return { kind, x: dir > 0 ? -Kick.CR : W + Kick.CR, vx: dir * U.rf(3.2, 4.4), h: 0, vh: 0, rot: 0, ground, scale: 1 };
+    }
+    if (kind === 'alta') return { kind, x: W / 2 + U.rf(-90, 90), vx: U.rf(-0.6, 0.6), h: 300, vh: 0, rot: 0, ground, scale: 1 };
+    if (kind === 'quicando' || bounce > 0.6) return { kind: 'quicando', x: W / 2 + U.rf(-60, 60), vx: U.rf(-0.5, 0.5), h: 90 + bounce * 4, vh: 0, rot: 0, ground, scale: 1 };
+    return { kind: 'parada', x: W / 2, vx: 0, h: 0, vh: 0, rot: 0, ground, scale: 1 };
+  },
+
+  // avança a animação; retorna true se a bola passou e saiu da tela
+  stepContact(c, k) {
+    c.x += c.vx * k;
+    c.rot += c.vx * k / Kick.CR;
+    if (c.kind === 'quicando' || c.kind === 'alta') {
+      c.vh -= 0.32 * k; c.h += c.vh * k;
+      if (c.h <= 0) { c.h = 0; c.vh = Math.abs(c.vh) > 1.5 ? -c.vh * 0.72 : 0; }
+      c.rot += 0.01 * k;
+      if (c.x < 120 || c.x > Kick.W - 120) c.vx = -c.vx;
+    }
+    c.scale = 1 + c.h / 900;
+    return c.kind === 'rasteira' && (c.x < -Kick.CR - 5 || c.x > Kick.W + Kick.CR + 5);
+  },
+
+  drawContactBall(ctx, c) {
+    const R = Kick.CR * c.scale, cx = c.x, cy = c.ground - c.h - Kick.CR;
+    // gramado e sombra
+    ctx.fillStyle = 'rgba(47,138,60,.5)'; ctx.fillRect(0, c.ground, Kick.W, Kick.H - c.ground);
+    const sh = Math.max(0.25, 1 - c.h / 400);
+    ctx.beginPath(); ctx.ellipse(cx, c.ground + 4, Kick.CR * sh, 12 * sh, 0, 0, 7); ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.fillStyle = '#f4f4f4'; ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.clip();
+    ctx.fillStyle = '#2b2b2b';
+    const pent = (x, y, r, a0) => { ctx.beginPath(); for (let i = 0; i < 5; i++) { const a = a0 + i * 2 * Math.PI / 5; ctx[i ? 'lineTo' : 'moveTo'](x + Math.cos(a) * r, y + Math.sin(a) * r); } ctx.closePath(); ctx.fill(); };
+    pent(cx, cy, R * 0.27, c.rot - Math.PI / 2);
+    for (let i = 0; i < 5; i++) { const a = c.rot - Math.PI / 2 + i * 2 * Math.PI / 5; pent(cx + Math.cos(a) * R * 0.87, cy + Math.sin(a) * R * 0.87, R * 0.22, a + Math.PI); }
+    ctx.restore();
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.lineWidth = 3; ctx.strokeStyle = '#222'; ctx.stroke();
+  },
+
   drawPitch(ctx) {
     for (let i = 0; i < 10; i++) {
       ctx.fillStyle = i % 2 ? '#2f8a3c' : '#2a7f36';
@@ -836,6 +880,20 @@ const Kick = {
       case 'penalti':
         s.title = 'Pênalti!'; s.ball = { x: 320, y: 120 }; s.maxTouches = 1; break;
     }
+    // como a bola chega até você
+    const b = s.ball;
+    const arrive = {
+      chance: ['rasteira', 'alta', 'quicando'], contra: ['parada', 'rasteira'], longe: ['quicando', 'rasteira', 'quicando'],
+      passe: ['parada', 'rasteira'], falta: ['parada'], penalti: ['parada'],
+    }[type];
+    s.arrive = U.pick(arrive);
+    if (s.arrive === 'alta') s.from = { x: b.x < 320 ? 615 : 25, y: R(70, 200) };                 // cruzamento
+    else if (s.arrive === 'quicando') s.from = { x: b.x + R(-70, 70), y: Math.max(60, b.y - R(70, 110)) }; // rebote
+    else if (s.arrive === 'rasteira') {
+      const m = s.mates.find(m => m.y > b.y);
+      s.from = m ? { x: m.x, y: m.y } : { x: b.x + R(-120, 120), y: Kick.H - 5 };                // passe de trás
+    }
+    s.setpiece = type === 'falta' || type === 'penalti';
     return s;
   },
 
@@ -856,9 +914,10 @@ const Kick = {
     const PLAYER_H = 14;     // acima disso a bola passa por cima dos jogadores
     const st = {
       me: { x: sc.ball.x, y: sc.ball.y + 14, run: null },
-      ball: { x: sc.ball.x, y: sc.ball.y, z: 0, vx: 0, vy: 0, vz: 0, moving: false },
+      ball: { x: (sc.from || sc.ball).x, y: (sc.from || sc.ball).y, z: 0, vx: 0, vy: 0, vz: 0, moving: false },
+      arrKind: sc.arrive || 'parada', arr: { t: 0 }, bounce: 0, bt: 0, press: 0, cv: null,
       gk: { ...sc.gk }, defs: sc.defenders.map(d => ({ ...d })), mates: sc.mates.map(m => ({ ...m })),
-      phase: 'aim', aim: null, aiming: false, shot: null, cross: { x: 0, y: 0, vx: 0, vy: 0 }, contactT: 0,
+      phase: sc.arrive && sc.arrive !== 'parada' ? 'arrive' : 'aim', aim: null, aiming: false, shot: null, contactT: 0,
       owner: 'me', holder: null, mateT: 0, touches: 0, passes: 0, spin: 0, lastKicker: 'me',
       over: false, msg: null, msgT: 0,
     };
@@ -866,8 +925,9 @@ const Kick = {
     const hint = host.querySelector('#kick-hint');
     const updInfo = () => {
       info.textContent = `Toques: ${st.touches}/${sc.maxTouches}`;
-      hint.textContent = st.phase === 'aim' && st.owner === 'me' ? 'Arraste para trás a partir da bola e solte para mirar. Quanto mais longe, mais força.'
-        : st.phase === 'contact' ? 'Toque para escolher onde bater na bola: lado = efeito, embaixo = bola alta, em cima = rasteira forte.'
+      hint.textContent = st.phase === 'arrive' ? { rasteira: 'A bola vem rasteira até você...', alta: 'Cruzamento! A bola vem pelo alto...', quicando: 'A bola sobra quicando...' }[st.arrKind] || ''
+        : st.phase === 'aim' && st.owner === 'me' ? 'Arraste para trás a partir da bola e solte para mirar. Quanto mais longe, mais força.' + (sc.setpiece ? '' : ' Não demore: a marcação chega!')
+        : st.phase === 'contact' ? 'Toque no ponto da bola onde quer bater: lado = efeito, embaixo = bola alta, em cima = rasteira forte. Fora da bola = chute mascado.'
         : st.owner === 'mate' ? 'O companheiro está com a bola. Você se desloca para receber.' : '';
     };
     updInfo();
@@ -878,7 +938,13 @@ const Kick = {
     };
     cv.addEventListener('pointerdown', (e) => {
       if (st.over) return;
-      if (st.phase === 'contact') { lockContact(); return; }
+      if (st.phase === 'contact') {
+        const p = toLocal(e), c = st.cv;
+        const R = Kick.CR * c.scale;
+        const dx = (p.x - c.x) / R, dy = (p.y - (c.ground - c.h - Kick.CR)) / R, d = Math.hypot(dx, dy);
+        lockContact({ x: d > 1 ? dx / d : dx, y: d > 1 ? dy / d : dy, h: c.h, mishit: d > 1.12 });
+        return;
+      }
       if (st.phase !== 'aim' || st.owner !== 'me' || st.ball.moving) return;
       cv.setPointerCapture(e.pointerId);
       st.aiming = true; st.aim = toLocal(e);
@@ -892,9 +958,7 @@ const Kick = {
       const pow = Math.min(Math.hypot(dx, dy), 160) / 160;
       if (pow < 0.08) return;
       st.shot = { ang: Math.atan2(dy, dx), pow };
-      // o ponto de contato começa num lugar aleatório da bola e fica se mexendo
-      const a = U.rf(0, 6.28), r = U.rf(0.2, 0.7);
-      st.cross = { x: Math.cos(a) * r, y: Math.sin(a) * r, vx: U.rf(-1, 1), vy: U.rf(-1, 1) };
+      st.cv = Kick.contactBall(st.arrKind, st.bounce);
       st.contactT = 0; st.phase = 'contact'; updInfo();
     });
 
@@ -905,19 +969,23 @@ const Kick = {
       return Math.abs(Math.atan2(Math.sin(a - ang), Math.cos(a - ang))) < 0.25;
     });
 
-    function lockContact() {
-      const c = st.cross, s = st.shot, b = st.ball;
+    function lockContact(c) {
+      const s = st.shot, b = st.ball;
       const pass = isPassAim(b, s.ang);
       const skill = pass ? attrs.passe : attrs.chute;
-      const sd = (0.015 + (1 - attrs.tecnica / 100) * 0.06 + (1 - skill / 100) * 0.05 + (1 - attrs.energia / 100) * 0.04) * (0.6 + s.pow * 0.6);
+      const volley = Math.min(1.5, c.h / 120); // bater com a bola no ar: mais força, menos controle
+      let sd = (0.015 + (1 - attrs.tecnica / 100) * 0.06 + (1 - skill / 100) * 0.05 + (1 - attrs.energia / 100) * 0.04) * (0.6 + s.pow * 0.6) * (1 + volley * 0.7);
+      let pow = s.pow;
+      if (c.mishit) { pow *= 0.45; sd += 0.25; st.msg = 'Pegou mal na bola!'; st.msgT = 0; }
       const ang = s.ang + U.gauss(0, sd);
       const drive = Math.max(0, -c.y);   // em cima: mais rápida e rasteira
       const lift = Math.max(0, c.y);     // embaixo: sobe
-      const sp = (5 + s.pow * (8 + attrs.chute / 100 * 6)) * (1 + drive * 0.12) * (1 - lift * 0.18);
+      const sp = (5 + pow * (8 + attrs.chute / 100 * 6)) * (1 + drive * 0.12) * (1 - lift * 0.18) * (1 + volley * 0.08);
       b.vx = Math.cos(ang) * sp; b.vy = Math.sin(ang) * sp;
-      b.vz = lift * (2.5 + s.pow * 5.5) + (drive ? 0 : 0.4);
+      b.z = Math.min(b.z, 4);
+      b.vz = lift * (2.5 + pow * 5.5) + (drive ? 0 : 0.4) + volley * 1.2;
       b.moving = true;
-      st.spin = -c.x * 3;
+      st.spin = -c.x * 3; st.bounce = 0;
       st.kickFrom = { x: b.x, y: b.y }; st.lastKicker = 'me';
       st.touches++; st.phase = 'flight'; st.owner = null;
       // você corre para um espaço depois de tocar a bola
@@ -979,6 +1047,7 @@ const Kick = {
         const laneBlocked = st.defs.some(df => Math.hypot(df.x - (b.x + lead.x) / 2, df.y - (b.y + lead.y) / 2) < 30);
         const ang = Math.atan2(lead.y - b.y, lead.x - b.x) + U.gauss(0, 0.05);
         b.vx = Math.cos(ang) * sp; b.vy = Math.sin(ang) * sp; b.vz = laneBlocked ? 3.2 : 0;
+        st.lastPassLofted = laneBlocked;
         st.msg = 'Tabela!'; st.msgT = 0;
       }
       b.moving = true; st.owner = null; st.holder = null; st.phase = 'flight'; updInfo();
@@ -1006,6 +1075,35 @@ const Kick = {
       tx = U.clamp(tx, Kick.POST_L + 4, Kick.POST_R - 4);
       if (!st.over) g.x += U.clamp(tx - g.x, -gkSpeed, gkSpeed);
 
+      // a bola chegando até você
+      if (st.phase === 'arrive' && !st.over) {
+        const A = st.arr, kind = st.arrKind, from = sc.from, to = sc.ball;
+        const T = { rasteira: 75, alta: 95, quicando: 80 }[kind];
+        A.t++;
+        const u = Math.min(1, A.t / T);
+        const e = kind === 'rasteira' ? 1 - (1 - u) * (1 - u) : u;
+        b.x = from.x + (to.x - from.x) * e; b.y = from.y + (to.y - from.y) * e;
+        b.z = kind === 'alta' ? 4 * 75 * u * (1 - u) : kind === 'quicando' ? Math.abs(Math.sin(u * Math.PI * 2)) * 30 * (1 - u * 0.5) : 0;
+        if (u >= 1) {
+          st.phase = 'aim'; st.bounce = kind === 'alta' ? 16 : kind === 'quicando' ? 10 : 0; st.bt = 0;
+          if (kind === 'rasteira') st.arrKind = 'rasteira';
+          updInfo();
+        }
+        return;
+      }
+      // bola quicando no seu pé enquanto você mira
+      if (st.phase === 'aim' || st.phase === 'contact') {
+        if (st.bounce > 0.6) { st.bt++; b.z = st.bounce * Math.abs(Math.sin(st.bt * 0.11)); st.bounce *= 0.994; }
+        else { b.z = 0; st.bounce = 0; }
+      }
+      if (st.phase === 'aim' && st.owner === 'me' && !sc.setpiece && !st.over) {
+        st.press++;
+        if (st.press > 150 && st.defs.length) {
+          const near = st.defs.reduce((a, d) => (Math.hypot(d.x - st.me.x, d.y - st.me.y) < Math.hypot(a.x - st.me.x, a.y - st.me.y) ? d : a));
+          near.x += U.clamp(st.me.x - near.x, -0.8, 0.8); near.y += U.clamp(st.me.y - 10 - near.y, -0.8, 0.8);
+          if (Math.hypot(near.x - b.x, near.y - b.y) < 16) return finish('blocked', 'Desarmado! Você demorou.');
+        }
+      }
       // bola com o companheiro: marcação aperta e ele decide
       if (st.owner === 'mate' && !st.over) {
         const m = st.holder;
@@ -1053,7 +1151,9 @@ const Kick = {
       // você recebe a devolução
       if (st.lastKicker === 'mate' && b.z < 18 && far && Math.hypot(b.x - st.me.x, b.y - st.me.y + 14) < 24) {
         b.moving = false; b.vx = b.vy = b.vz = 0; b.z = 0; b.x = st.me.x; b.y = st.me.y - 14;
-        st.me.run = null; st.owner = 'me'; st.phase = 'aim';
+        st.me.run = null; st.owner = 'me'; st.phase = 'aim'; st.press = 0;
+        st.arrKind = st.lastPassLofted ? 'quicando' : 'rasteira';
+        st.bounce = st.lastPassLofted ? 10 : 0; st.bt = 0;
         updInfo();
         return;
       }
@@ -1086,38 +1186,15 @@ const Kick = {
     }
 
     function drawContact() {
-      const cx = Kick.W / 2, cy = Kick.H / 2, R = 90;
-      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, 0, Kick.W, Kick.H);
-      // bola grande
-      ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.fillStyle = '#f4f4f4'; ctx.fill();
-      ctx.lineWidth = 3; ctx.strokeStyle = '#222'; ctx.stroke();
-      ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.clip();
-      ctx.fillStyle = '#2b2b2b';
-      const pent = (x, y, r) => { ctx.beginPath(); for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + i * 2 * Math.PI / 5; ctx[i ? 'lineTo' : 'moveTo'](x + Math.cos(a) * r, y + Math.sin(a) * r); } ctx.closePath(); ctx.fill(); };
-      pent(cx, cy, 24);
-      for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + i * 2 * Math.PI / 5; pent(cx + Math.cos(a) * 78, cy + Math.sin(a) * 78, 20); }
-      ctx.restore();
-      ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('rasteira forte', cx, cy - R - 10);
-      ctx.fillText('bola alta', cx, cy + R + 20);
-      ctx.fillText('curva p/ direita', cx - R - 60, cy + 4);
-      ctx.fillText('curva p/ esquerda', cx + R + 64, cy + 4);
-      // ponto de contato se mexendo
-      const c = st.cross;
-      const wob = 0.012 + (1 - attrs.tecnica / 100) * 0.035 + (1 - attrs.energia / 100) * 0.02;
-      c.vx = U.clamp(c.vx + U.gauss(0, 0.35), -1, 1); c.vy = U.clamp(c.vy + U.gauss(0, 0.35), -1, 1);
-      c.x += c.vx * wob * (st.rt || 1); c.y += c.vy * wob * (st.rt || 1);
-      const r = Math.hypot(c.x, c.y);
-      if (r > 0.85) { c.x *= 0.85 / r; c.y *= 0.85 / r; c.vx = -c.vx; c.vy = -c.vy; }
-      const px = cx + c.x * R, py = cy + c.y * R;
-      ctx.strokeStyle = '#e53935'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(px, py, 10, 0, 7); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(px - 16, py); ctx.lineTo(px + 16, py); ctx.moveTo(px, py - 16); ctx.lineTo(px, py + 16); ctx.stroke();
-      st.contactT += st.rt || 1;
-      const left = Math.max(0, 5 - st.contactT / 60);
-      ctx.fillStyle = '#ffe27a'; ctx.font = 'bold 16px sans-serif';
-      ctx.fillText('Toque para bater na bola  (' + left.toFixed(1) + 's)', cx, 34);
-      if (st.contactT > 300) lockContact();
+      ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(0, 0, Kick.W, Kick.H);
+      const k = (st.rt || 1) * Kick.speed() / 0.55;
+      const out = Kick.stepContact(st.cv, k);
+      Kick.drawContactBall(ctx, st.cv);
+      ctx.fillStyle = '#ffe27a'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText({ parada: 'Toque na bola onde quer bater', rasteira: 'A bola vem rolando: toque nela!', quicando: 'A bola está quicando: toque nela!', alta: 'Bola alta: toque nela!' }[st.cv.kind], Kick.W / 2, 30);
+      ctx.fillStyle = '#cfe3f5'; ctx.font = '12px sans-serif';
+      ctx.fillText('em cima = rasteira forte  •  embaixo = bola alta  •  lado esquerdo = curva p/ direita  •  lado direito = curva p/ esquerda', Kick.W / 2, Kick.H - 14);
+      if (out) finish('miss', 'A bola passou por você!');
     }
 
     function draw() {
@@ -1144,6 +1221,12 @@ const Kick = {
         ctx.stroke(); ctx.setLineDash([]);
         ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(14, Kick.H - 30, 124, 16);
         ctx.fillStyle = pow > 0.85 ? '#ff6b6b' : '#7cff8a'; ctx.fillRect(16, Kick.H - 28, 120 * pow, 12);
+      }
+      if (st.phase === 'aim' && st.owner === 'me' && !sc.setpiece && !st.over) {
+        const left = Math.max(0, 1 - st.press / 230);
+        ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(Kick.W - 138, Kick.H - 30, 124, 16);
+        ctx.fillStyle = left < 0.35 ? '#ff6b6b' : '#ffe27a'; ctx.fillRect(Kick.W - 136, Kick.H - 28, 120 * left, 12);
+        ctx.fillStyle = '#fff'; ctx.font = '11px sans-serif'; ctx.textAlign = 'right'; ctx.fillText('Tempo', Kick.W - 144, Kick.H - 18);
       }
       if (st.phase === 'contact') { drawContact(); return; }
       if (st.msg) {
