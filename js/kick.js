@@ -3,6 +3,18 @@ const Kick = {
   W: 640, H: 460,
   GOAL_Y: 22, POST_L: 268, POST_R: 372,
 
+  // velocidade dos lances (guardada no navegador)
+  SPEEDS: { lenta: 0.35, normal: 0.55, rapida: 0.85 },
+  speedKey() { try { return localStorage.getItem('rag_kick_speed') || 'normal'; } catch (e) { return 'normal'; } },
+  speed() { return Kick.SPEEDS[Kick.speedKey()] || 0.55; },
+  setSpeed(k) { try { localStorage.setItem('rag_kick_speed', k); } catch (e) { /* ignora */ } },
+  speedSelect() {
+    const cur = Kick.speedKey();
+    return `<label class="inline small">Velocidade do lance
+      <select id="kick-speed" onchange="Kick.setSpeed(this.value)">${[['lenta', 'Lenta'], ['normal', 'Normal'], ['rapida', 'Rápida']]
+        .map(([k, v]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${v}</option>`).join('')}</select></label>`;
+  },
+
   drawPitch(ctx) {
     for (let i = 0; i < 10; i++) {
       ctx.fillStyle = i % 2 ? '#2f8a3c' : '#2a7f36';
@@ -94,7 +106,7 @@ const Kick = {
       <div class="kick-wrap">
         <div class="kick-head"><b>${U.esc(sc.title)}</b><span id="kick-info"></span></div>
         <canvas id="kick-canvas" width="${Kick.W}" height="${Kick.H}"></canvas>
-        <div class="kick-controls"><span id="kick-hint" class="muted small"></span></div>
+        <div class="kick-controls">${Kick.speedSelect()}<span id="kick-hint" class="muted small"></span></div>
       </div>`;
     const cv = host.querySelector('#kick-canvas');
     const ctx = cv.getContext('2d');
@@ -186,7 +198,7 @@ const Kick = {
     const finish = (result, msg) => {
       if (st.over) return;
       st.over = true; st.msg = msg; st.msgT = 0; st.phase = 'over';
-      setTimeout(() => { cancelAnimationFrame(st.raf); onDone({ result, passes: st.passes }); }, 1500);
+      setTimeout(() => { cancelAnimationFrame(st.raf); onDone({ result, passes: st.passes }); }, 1900);
     };
 
     // o companheiro (robô) decide o que fazer com a bola
@@ -352,14 +364,14 @@ const Kick = {
       const c = st.cross;
       const wob = 0.012 + (1 - attrs.tecnica / 100) * 0.035 + (1 - attrs.energia / 100) * 0.02;
       c.vx = U.clamp(c.vx + U.gauss(0, 0.35), -1, 1); c.vy = U.clamp(c.vy + U.gauss(0, 0.35), -1, 1);
-      c.x += c.vx * wob; c.y += c.vy * wob;
+      c.x += c.vx * wob * (st.rt || 1); c.y += c.vy * wob * (st.rt || 1);
       const r = Math.hypot(c.x, c.y);
       if (r > 0.85) { c.x *= 0.85 / r; c.y *= 0.85 / r; c.vx = -c.vx; c.vy = -c.vy; }
       const px = cx + c.x * R, py = cy + c.y * R;
       ctx.strokeStyle = '#e53935'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(px, py, 10, 0, 7); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(px - 16, py); ctx.lineTo(px + 16, py); ctx.moveTo(px, py - 16); ctx.lineTo(px, py + 16); ctx.stroke();
-      st.contactT++;
+      st.contactT += st.rt || 1;
       const left = Math.max(0, 5 - st.contactT / 60);
       ctx.fillStyle = '#ffe27a'; ctx.font = 'bold 16px sans-serif';
       ctx.fillText('Toque para bater na bola  (' + left.toFixed(1) + 's)', cx, 34);
@@ -393,14 +405,23 @@ const Kick = {
       }
       if (st.phase === 'contact') { drawContact(); return; }
       if (st.msg) {
-        st.msgT++;
+        st.msgT += st.rt || 1;
         Kick.banner(ctx, st.msg, Math.max(0, 1 - st.msgT / (st.over ? 120 : 50)));
         if (!st.over && st.msgT > 50) st.msg = null;
       }
     }
 
     Kick._st = st;
-    function loop() { physics(); draw(); st.raf = requestAnimationFrame(loop); }
-    loop();
+    function loop(now) {
+      // física em passos fixos de 1/60 s, multiplicados pela velocidade escolhida;
+      // funciona igual em telas de 60, 90 ou 120 Hz
+      const dt = Math.min(50, now - (st.last || now)); st.last = now;
+      st.rt = dt / (1000 / 60);
+      st.acc = (st.acc || 0) + st.rt * Kick.speed();
+      while (st.acc >= 1) { physics(); st.acc -= 1; }
+      draw();
+      st.raf = requestAnimationFrame(loop);
+    }
+    st.raf = requestAnimationFrame(loop);
   },
 };

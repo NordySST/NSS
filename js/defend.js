@@ -26,6 +26,7 @@ const Defend = {
       <div class="kick-wrap">
         <div class="kick-head"><b>${U.esc(sc.title)}</b><span>Segure e arraste para mover. Encoste no atacante para dar o bote.</span></div>
         <canvas id="def-canvas" width="${Kick.W}" height="${Kick.H}"></canvas>
+        <div class="kick-controls">${Kick.speedSelect()}</div>
       </div>`;
     const cv = host.querySelector('#def-canvas');
     const ctx = cv.getContext('2d');
@@ -51,7 +52,7 @@ const Defend = {
     const finish = (result) => {
       if (st.over) return;
       st.over = true; st.msg = Defend.RESULTS[result]; st.msgT = 0;
-      setTimeout(() => { cancelAnimationFrame(st.raf); onDone({ result }); }, 1500);
+      setTimeout(() => { cancelAnimationFrame(st.raf); onDone({ result }); }, 1900);
     };
     const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
     const moveTo = (o, tx, ty, sp) => {
@@ -171,14 +172,23 @@ const Defend = {
       ctx.fillStyle = st.stamina < 25 ? '#ff6b6b' : '#7cd8ff'; ctx.fillRect(16, Kick.H - 28, 120 * st.stamina / 100, 12);
       ctx.fillStyle = '#fff'; ctx.font = '11px sans-serif'; ctx.textAlign = 'left'; ctx.fillText('Fôlego', 144, Kick.H - 18);
       if (st.msg) {
-        st.msgT++;
+        st.msgT += st.rt || 1;
         Kick.banner(ctx, st.msg, Math.max(0, 1 - st.msgT / (st.over ? 120 : 50)));
         if (!st.over && st.msgT > 50) st.msg = null;
       }
     }
 
     Defend._st = st;
-    function loop() { physics(); draw(); st.raf = requestAnimationFrame(loop); }
-    loop();
+    function loop(now) {
+      // física em passos fixos de 1/60 s, multiplicados pela velocidade escolhida;
+      // funciona igual em telas de 60, 90 ou 120 Hz
+      const dt = Math.min(50, now - (st.last || now)); st.last = now;
+      st.rt = dt / (1000 / 60);
+      st.acc = (st.acc || 0) + st.rt * Kick.speed();
+      while (st.acc >= 1) { physics(); st.acc -= 1; }
+      draw();
+      st.raf = requestAnimationFrame(loop);
+    }
+    st.raf = requestAnimationFrame(loop);
   },
 };
