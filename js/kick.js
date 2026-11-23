@@ -3,6 +3,47 @@ const Kick = {
   W: 640, H: 460,
   GOAL_Y: 22, POST_L: 268, POST_R: 372,
 
+  drawPitch(ctx) {
+    for (let i = 0; i < 10; i++) {
+      ctx.fillStyle = i % 2 ? '#2f8a3c' : '#2a7f36';
+      ctx.fillRect(0, i * Kick.H / 10, Kick.W, Kick.H / 10);
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 2;
+    ctx.strokeRect(10, Kick.GOAL_Y, Kick.W - 20, Kick.H);
+    ctx.strokeRect(150, Kick.GOAL_Y, 340, 150);
+    ctx.strokeRect(245, Kick.GOAL_Y, 150, 50);
+    ctx.beginPath(); ctx.arc(320, Kick.GOAL_Y + 105, 3, 0, 7); ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.beginPath(); ctx.arc(320, Kick.GOAL_Y + 105, 70, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke();
+    ctx.beginPath(); ctx.arc(320, Kick.H + 60, 90, 1.15 * Math.PI, 1.85 * Math.PI); ctx.stroke();
+    // gol
+    ctx.fillStyle = 'rgba(255,255,255,.18)';
+    ctx.fillRect(Kick.POST_L, 4, Kick.POST_R - Kick.POST_L, Kick.GOAL_Y - 4);
+    ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1;
+    for (let x = Kick.POST_L; x <= Kick.POST_R; x += 8) { ctx.beginPath(); ctx.moveTo(x, 4); ctx.lineTo(x, Kick.GOAL_Y); ctx.stroke(); }
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(Kick.POST_L, Kick.GOAL_Y); ctx.lineTo(Kick.POST_L, 4); ctx.lineTo(Kick.POST_R, 4); ctx.lineTo(Kick.POST_R, Kick.GOAL_Y); ctx.stroke();
+
+  },
+
+  dot(ctx, x, y, fill, stroke, label) {
+    ctx.beginPath(); ctx.arc(x, y + 3, 11, 0, 7); ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, 11, 0, 7); ctx.fillStyle = fill; ctx.fill();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = stroke; ctx.stroke();
+    if (label) { ctx.fillStyle = '#fff'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(label, x, y - 15); }
+  },
+
+  ball(ctx, x, y) {
+    ctx.beginPath(); ctx.arc(x, y, 6, 0, 7); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#222'; ctx.lineWidth = 1.5; ctx.stroke();
+  },
+
+  banner(ctx, text, alpha) {
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, Kick.H / 2 - 30, Kick.W, 60);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(text, Kick.W / 2, Kick.H / 2 + 10);
+    ctx.globalAlpha = 1;
+  },
+
   scenario(type, gkOvr, defOvr) {
     const R = U.rf;
     const s = { type, gk: { x: 320, y: 30, ovr: gkOvr }, defenders: [], mates: [], maxTouches: 2 };
@@ -200,32 +241,8 @@ const Kick = {
     }
 
     function draw() {
-      // gramado
-      for (let i = 0; i < 10; i++) {
-        ctx.fillStyle = i % 2 ? '#2f8a3c' : '#2a7f36';
-        ctx.fillRect(0, i * Kick.H / 10, Kick.W, Kick.H / 10);
-      }
-      ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 2;
-      ctx.strokeRect(10, Kick.GOAL_Y, Kick.W - 20, Kick.H);
-      ctx.strokeRect(150, Kick.GOAL_Y, 340, 150);
-      ctx.strokeRect(245, Kick.GOAL_Y, 150, 50);
-      ctx.beginPath(); ctx.arc(320, Kick.GOAL_Y + 105, 3, 0, 7); ctx.fillStyle = '#fff'; ctx.fill();
-      ctx.beginPath(); ctx.arc(320, Kick.GOAL_Y + 105, 70, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke();
-      ctx.beginPath(); ctx.arc(320, Kick.H + 60, 90, 1.15 * Math.PI, 1.85 * Math.PI); ctx.stroke();
-      // gol
-      ctx.fillStyle = 'rgba(255,255,255,.18)';
-      ctx.fillRect(Kick.POST_L, 4, Kick.POST_R - Kick.POST_L, Kick.GOAL_Y - 4);
-      ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1;
-      for (let x = Kick.POST_L; x <= Kick.POST_R; x += 8) { ctx.beginPath(); ctx.moveTo(x, 4); ctx.lineTo(x, Kick.GOAL_Y); ctx.stroke(); }
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.moveTo(Kick.POST_L, Kick.GOAL_Y); ctx.lineTo(Kick.POST_L, 4); ctx.lineTo(Kick.POST_R, 4); ctx.lineTo(Kick.POST_R, Kick.GOAL_Y); ctx.stroke();
-
-      const dot = (x, y, fill, stroke, label) => {
-        ctx.beginPath(); ctx.arc(x, y + 3, 11, 0, 7); ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fill();
-        ctx.beginPath(); ctx.arc(x, y, 11, 0, 7); ctx.fillStyle = fill; ctx.fill();
-        ctx.lineWidth = 2.5; ctx.strokeStyle = stroke; ctx.stroke();
-        if (label) { ctx.fillStyle = '#fff'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(label, x, y - 15); }
-      };
+      Kick.drawPitch(ctx);
+      const dot = (x, y, f, k, l) => Kick.dot(ctx, x, y, f, k, l);
       st.defs.forEach(d => dot(d.x, d.y, '#d84343', '#7a1010'));
       st.mates.forEach(m => dot(m.x, m.y, '#2f6fd6', '#0f2f66'));
       dot(st.gk.x, st.gk.y, '#f2c12e', '#6b5200');
@@ -261,6 +278,7 @@ const Kick = {
       }
     }
 
+    Kick._st = st;
     function loop() {
       physics(); draw();
       st.raf = requestAnimationFrame(loop);

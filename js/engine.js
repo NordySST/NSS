@@ -127,7 +127,8 @@ const Engine = {
     m.stats.poss[s]++;
     const atk = s === 0 ? sh : sa, dfn = s === 0 ? sa : sh;
     const ratio = atk.attack / dfn.defense;
-    const pChance = U.clamp(0.22 * Math.pow(ratio, 2.2) * (s === 0 ? 1.06 : 1), 0.04, 0.5);
+    // lances defensivos do usuário substituem parte das chances do adversário
+    const pChance = U.clamp(0.22 * Math.pow(ratio, 2.2) * (s === 0 ? 1.06 : 1), 0.04, 0.5) * (m.sides[1 - s].suppress || 1);
     m.ball = s === 0 ? U.rf(0.45, 0.7) : U.rf(0.3, 0.55);
 
     if (Math.random() < pChance) {

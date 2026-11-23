@@ -8,6 +8,27 @@ const ATTR_W = {
   DEF: { forca: .3, velocidade: .2, resistencia: .2, passe: .15, tecnica: .1, chute: .05 },
 };
 
+// Provas da peneira por posição
+const TRIALS = {
+  ATA: [
+    { name: 'Finalização', type: 'chance', n: 3, attrs: ['chute', 'forca'], tip: 'faça o gol com o goleiro e a marcação na frente.' },
+    { name: 'Contra-ataque', type: 'contra', n: 2, attrs: ['velocidade', 'passe'], tip: 'toque para os companheiros e conclua a jogada.' },
+    { name: 'Bola parada', type: 'falta', n: 2, attrs: ['tecnica'], tip: 'use o efeito para contornar a barreira.' },
+  ],
+  MEI: [
+    { name: 'Armação', type: 'passe', n: 3, attrs: ['passe', 'tecnica'], tip: 'encontre os companheiros e chegue ao gol. Cada passe certo vale pontos.' },
+    { name: 'Chute de fora', type: 'longe', n: 2, attrs: ['chute'], tip: 'finalize de fora da área.' },
+    { name: 'Transição', type: 'contra', n: 2, attrs: ['velocidade'], tip: 'puxe o contra-ataque.' },
+    { name: 'Recomposição', type: 'defesa', n: 1, attrs: ['resistencia', 'forca'], tip: 'volte para marcar e recupere a bola.' },
+  ],
+  DEF: [
+    { name: 'Marcação', type: 'defesa', n: 3, attrs: ['forca', 'tecnica'], tip: 'encoste no atacante para dar o bote, ou fique na linha do passe.' },
+    { name: 'Cobertura', type: 'defesa', n: 2, attrs: ['velocidade', 'resistencia'], tip: 'acompanhe a jogada sem perder o fôlego.' },
+    { name: 'Saída de bola', type: 'passe', n: 2, attrs: ['passe'], tip: 'troque passes com os companheiros.' },
+    { name: 'Bola parada', type: 'falta', n: 1, attrs: ['chute'], tip: 'cobre a falta.' },
+  ],
+};
+
 const SHOP = [
   { id: 'chut1', cat: 'Equipamento', name: 'Chuteira de treino', price: 6000, desc: '+2 Chute', fx: { chute: 2 } },
   { id: 'chut2', cat: 'Equipamento', name: 'Chuteira profissional', price: 45000, desc: '+3 Chute, +2 Técnica', fx: { chute: 3, tecnica: 2 } },
@@ -85,39 +106,117 @@ const PM = {
             <option value="ATA">Atacante</option><option value="MEI">Meio-campo</option><option value="DEF">Defensor</option>
           </select>
         </label>
-        <label>Ponto forte
-          <select id="c-str">${Object.entries(ATTRS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
-        </label>
-        <p class="muted small">Você começa aos 17 anos em um clube da Terceira Divisão.</p>
-        <div class="row"><button class="btn" onclick="Menu.show()">Voltar</button>
-        <button class="btn primary" onclick="PM.create()">Começar carreira</button></div>
+        <p class="muted small">Antes de assinar, você passa por uma <b>peneira</b> com provas da sua posição. O desempenho define seus atributos iniciais e qual clube vai te contratar.</p>
+        <div class="row wrap"><button class="btn" onclick="Menu.show()">Voltar</button>
+        <button class="btn" onclick="PM.skipTrial()">Pular peneira</button>
+        <button class="btn primary" onclick="PM.startTrial()">Fazer a peneira</button></div>
       </div>`);
   },
 
-  create() {
-    const first = document.getElementById('c-first').value.trim() || 'Jogador';
-    const last = document.getElementById('c-last').value.trim() || 'Novo';
-    const pos = document.getElementById('c-pos').value;
-    const str = document.getElementById('c-str').value;
-    const w = Data.createWorld();
+  readForm() {
+    return {
+      first: document.getElementById('c-first').value.trim() || 'Jogador',
+      last: document.getElementById('c-last').value.trim() || 'Novo',
+      pos: document.getElementById('c-pos').value,
+    };
+  },
+
+  skipTrial() {
+    const f = PM.readForm();
     const attrs = {};
     Object.keys(ATTRS).forEach(k => attrs[k] = U.ri(34, 42));
-    attrs[str] += 8;
-    const teamId = U.pick(Object.values(w.teams).filter(t => t.tier === 2)).id;
+    Object.keys(ATTR_W[f.pos]).sort((a, b) => ATTR_W[f.pos][b] - ATTR_W[f.pos][a]).slice(0, 2).forEach(k => attrs[k] += 4);
+    PM.create(f, attrs, 2);
+  },
+
+  // ---------- Peneira ----------
+  startTrial() {
+    const f = PM.readForm();
+    PM.trial = { form: f, drills: TRIALS[f.pos].map(d => ({ ...d, scores: [] })), di: 0 };
+    PM.trialStep();
+  },
+
+  trialStep() {
+    const T = PM.trial;
+    const d = T.drills[T.di];
+    if (!d) return PM.trialResult();
+    const k = d.scores.length + 1;
+    const list = T.drills.map((x, i) => `<li class="${i === T.di ? 'cur' : i < T.di ? 'done' : ''}">${x.name} ${i < T.di ? '— ' + PM.grade(U.avg(x.scores)) : ''}</li>`).join('');
+    UI.screen(`
+      <div class="trial">
+        <div class="panel"><h2>Peneira — ${POS_NAMES[T.form.pos]}</h2>
+          <ol class="trial-list">${list}</ol>
+          <p><b>${d.name}</b> (tentativa ${k}/${d.n}): ${d.tip}</p>
+          <p class="muted small">Avalia: ${d.attrs.map(a => ATTRS[a]).join(', ')}</p>
+        </div>
+        <div id="trial-host"></div>
+      </div>`);
+    const host = document.getElementById('trial-host');
+    const base = { chute: 50, passe: 50, tecnica: 50, velocidade: 50, forca: 50, resistencia: 50, energia: 100 };
+    const done = (r) => {
+      d.scores.push(PM.trialScore(r));
+      if (d.scores.length >= d.n) T.di++;
+      PM.trialStep();
+    };
+    if (d.type === 'defesa') Defend.start(host, Defend.scenario(48, 50), base, done);
+    else Kick.start(host, Kick.scenario(d.type, 45, 45), base, done);
+  },
+
+  trialScore(r) {
+    const map = {
+      goal: 1, assist: 0.85, saved: 0.4, blocked: 0.2, miss: 0.15,
+      tackle: 1, intercept: 1, block: 0.9, cover: 0.5, wide: 0.45, foul: 0.15, conceded: 0,
+    };
+    let v = map[r.result] ?? 0.2;
+    if (r.passes) v = Math.min(1, v + r.passes * 0.15);
+    return v;
+  },
+
+  grade(v) { return v >= 0.85 ? 'A' : v >= 0.65 ? 'B' : v >= 0.45 ? 'C' : v >= 0.25 ? 'D' : 'E'; },
+
+  trialResult() {
+    const T = PM.trial;
+    const acc = {};
+    T.drills.forEach(d => d.attrs.forEach(a => (acc[a] = acc[a] || []).push(U.avg(d.scores))));
+    const overall = U.avg(T.drills.map(d => U.avg(d.scores)));
+    const attrs = {};
+    Object.keys(ATTRS).forEach(k => {
+      attrs[k] = acc[k] ? Math.round(30 + 22 * U.avg(acc[k])) + U.ri(-1, 1) : 30 + Math.round(10 * overall) + U.ri(0, 3);
+    });
+    const tier = overall >= 0.6 ? 1 : 2;
+    T.attrs = attrs; T.tier = tier;
+    const ovr = PM.computeOvr(attrs, T.form.pos);
+    UI.screen(`<div class="panel narrow"><h2>Resultado da peneira</h2>
+      ${T.drills.map(d => `<div class="kv"><span>${d.name}</span><b class="grade g-${PM.grade(U.avg(d.scores))}">${PM.grade(U.avg(d.scores))}</b></div>`).join('')}
+      <div class="kv"><span>Nota geral</span><b class="grade g-${PM.grade(overall)}">${PM.grade(overall)}</b></div>
+      <h4>Atributos iniciais</h4>
+      ${Object.entries(ATTRS).map(([k, v]) => `<div class="kv"><span>${v}${acc[k] ? '' : ' <span class="muted small">(estimado)</span>'}</span><b class="${UI.ovrCls(attrs[k])}">${attrs[k]}</b></div>`).join('')}
+      <div class="kv"><span>Geral como ${POS_NAMES[T.form.pos]}</span><b>${ovr}</b></div>
+      <p>${tier === 1 ? 'Ótima peneira! Um clube da <b>Segunda Divisão</b> quer te contratar.' : 'Um clube da <b>Terceira Divisão</b> quer te contratar.'}</p>
+      <div class="row"><button class="btn" onclick="PM.startTrial()">Refazer peneira</button>
+      <button class="btn primary" onclick="PM.create(PM.trial.form, PM.trial.attrs, PM.trial.tier)">Assinar contrato</button></div></div>`);
+  },
+
+  create(f, attrs, tier) {
+    const { first, last, pos } = f;
+    const w = Data.createWorld();
+    const pool = Object.values(w.teams).filter(t => t.tier === tier).sort((a, b) => a.rep - b.rep);
+    const teamId = U.pick(pool.slice(0, Math.ceil(pool.length / 2))).id;
     const p = Data.makePlayer(pos, 40, 17);
     Object.assign(p, { first, last, isUser: true, teamId, pot: 99, contract: 2 });
+    const salary = tier === 1 ? 1500 : 800;
     w.players[p.id] = p; w.teams[teamId].players.push(p.id);
     G = {
       mode: 'player', world: w,
       user: {
         pid: p.id, attrs, xp: {}, energia: 100, felicidade: 60, dinheiro: 5000, fama: 0,
         rel: { tecnico: 50, torcida: 40, elenco: 50 },
-        items: [], salary: 800, career: [], trophies: [], offers: [], inbox: [],
+        items: [], salary, career: [], trophies: [], offers: [], inbox: [],
         lastRatings: [], tab: 'home', retired: false,
       },
     };
     PM.syncPlayer();
-    PM.msg(`Bem-vindo ao ${w.teams[teamId].name}! Você assinou seu primeiro contrato profissional (${U.money(800)}/semana, 2 temporadas).`);
+    PM.msg(`Bem-vindo ao ${w.teams[teamId].name}! Você assinou seu primeiro contrato profissional (${U.money(salary)}/semana, 2 temporadas).`);
     Save.save();
     PM.hub();
   },
@@ -350,7 +449,8 @@ const PM = {
     if (!starter) mins.splice(Math.ceil(mins.length / 2));
     mins.sort((a, b) => a - b);
     if (!starter && enterAt < 999) m.sides[sideIdx].reserve = 1;
-    const ctx = { m, fx, sideIdx, starter, enterAt, mins, goals: 0, assists: 0, bonus: 0, entered: starter };
+    if (starter) m.sides[sideIdx].suppress = PM.suppress(p.pos);
+    const ctx = { m, fx, sideIdx, starter, enterAt, mins, goals: 0, assists: 0, tackles: 0, bonus: 0, entered: starter };
     PM.ctx = ctx;
     UI.modal(`<h3>${starter ? 'Você é titular!' : 'Você começa no banco'}</h3>
       <p>${starter ? 'O treinador confia em você. Faça valer!' : 'Fique atento: você pode entrar no segundo tempo.'}</p>
@@ -364,7 +464,7 @@ const PM = {
       userSide: c.sideIdx, highlight: p.id,
       confirmSkip: 'Simular até o fim? Seus lances serão decididos automaticamente.',
       extraPanel: () => `<div class="panel mini"><b>${U.esc(Data.short(p))}</b> — ${c.entered ? 'em campo' : 'no banco'}<br>
-        <span class="muted small">Nota: ${c.entered ? (c.m.sides[c.sideIdx].ratings[p.id] || 6).toFixed(1) : '-'} • Gols ${c.goals} • Assist. ${c.assists}</span></div>`,
+        <span class="muted small">Nota: ${c.entered ? (c.m.sides[c.sideIdx].ratings[p.id] || 6).toFixed(1) : '-'} • Gols ${c.goals} • Assist. ${c.assists}${p.pos !== 'ATA' ? ' • Desarmes ' + c.tackles : ''}</span></div>`,
       hook: (m, resume, host, skip) => PM.hook(m, resume, host, skip),
       onEnd: () => PM.postMatch(),
     });
@@ -378,6 +478,7 @@ const PM = {
         .sort((a, b) => (w.players[b].pos === p.pos) - (w.players[a].pos === p.pos) || w.players[a].fitness - w.players[b].fitness);
       if (side.subs > 0 && outs.length && Engine.substitute(w, m, c.sideIdx, outs[0], p.id)) {
         c.entered = true; side.reserve = 0;
+        side.suppress = PM.suppress(p.pos);
         if (MatchView.addEvents) MatchView.addEvents(m.events.slice(-1));
       } else c.enterAt = 999;
     }
@@ -390,24 +491,38 @@ const PM = {
     const types = {
       ATA: ['chance', 'chance', 'contra', 'longe', 'falta'],
       MEI: ['passe', 'longe', 'contra', 'falta', 'chance'],
-      DEF: ['passe', 'passe', 'longe', 'falta'],
+      DEF: ['defesa', 'defesa', 'defesa', 'defesa', 'passe', 'longe', 'falta'],
     }[p.pos];
     let type = U.pick(types);
-    if (Math.random() < 0.06) type = 'penalti';
-    const sc = Kick.scenario(type, gk ? gk.ovr : 50, defOvr);
+    if (type !== 'defesa' && Math.random() < 0.06) type = 'penalti';
     const attrs = { ...PM.u.attrs, energia: Math.max(20, PM.u.energia - m.minute * 0.15) };
+    const tired = attrs.energia / 100;
     if (skip) {
       const sk = (p.ovr + attrs.energia * 0.2) / 100;
       const r = Math.random();
-      const res = r < 0.1 + sk * 0.2 ? 'goal' : r < 0.18 + sk * 0.3 ? 'assist' : 'miss';
+      let res;
+      if (type === 'defesa') res = r < 0.3 + sk * 0.3 ? 'tackle' : r < 0.55 + sk * 0.2 ? 'cover' : r < 0.85 ? 'saved' : 'conceded';
+      else res = r < 0.1 + sk * 0.2 ? 'goal' : r < 0.18 + sk * 0.3 ? 'assist' : 'miss';
       PM.resolveMoment(m, res, 0);
       return false;
     }
     host.classList.remove('hidden');
     host.parentElement.querySelector('#mv-pitch').classList.add('hidden');
+    const done = (r) => { PM.resolveMoment(m, r.result, r.passes || 0); resume(); };
+    if (type === 'defesa') {
+      const myGk = w.players[side.xi[0]];
+      const atkOvr = U.avg(Engine.onPitch(m, opp).filter(id => ['ATA', 'MEI'].includes(w.players[id].pos)).map(id => w.players[id].ovr)) || defOvr;
+      const sc = Defend.scenario(atkOvr, myGk ? myGk.ovr : 50);
+      Engine.ev(m, 'moment', c.sideIdx, 'Lance seu: o adversário ataca! Marque!');
+      MatchView.addEvents(m.events.slice(-1));
+      // cansaço reduz velocidade e fôlego
+      Defend.start(host, sc, { ...attrs, velocidade: attrs.velocidade * (0.75 + 0.25 * tired), resistencia: attrs.resistencia * (0.6 + 0.4 * tired) }, done);
+      return true;
+    }
+    const sc = Kick.scenario(type, gk ? gk.ovr : 50, defOvr);
     Engine.ev(m, 'moment', c.sideIdx, `Lance seu: ${sc.title}`);
     MatchView.addEvents(m.events.slice(-1));
-    Kick.start(host, sc, attrs, (r) => { PM.resolveMoment(m, r.result, r.passes); resume(); });
+    Kick.start(host, sc, attrs, done);
     return true;
   },
 
@@ -428,6 +543,8 @@ const PM = {
       side.ratings[p.id] += 0.8;
       m.stats.shots[c.sideIdx]++; m.stats.onT[c.sideIdx]++;
       e = Engine.ev(m, 'goal', c.sideIdx, `GOOOL! ${Data.short(w.players[sc])} marca após passe de ${Data.short(p)}!`, sc);
+    } else if (Defend.RESULTS[result]) {
+      return PM.resolveDefense(m, result);
     } else {
       side.ratings[p.id] -= result === 'blocked' ? 0.1 : 0.2;
       m.stats.shots[c.sideIdx]++;
@@ -437,6 +554,38 @@ const PM = {
     }
     if (MatchView.addEvents) MatchView.addEvents([e]);
   },
+
+  resolveDefense(m, result) {
+    const c = PM.ctx, w = PM.w, p = PM.p, si = c.sideIdx, side = m.sides[si], opp = m.sides[1 - si];
+    const delta = { tackle: 0.45, intercept: 0.45, block: 0.4, cover: 0.05, saved: -0.1, wide: 0, foul: -0.25, conceded: -0.5 }[result];
+    side.ratings[p.id] = (side.ratings[p.id] || 6) + delta;
+    const atk = Engine.pickPlayer(w, m, 1 - si, { ATA: 5, MEI: 2, DEF: 0.3 });
+    const an = atk ? Data.short(w.players[atk]) : 'o atacante';
+    let e;
+    if (['tackle', 'intercept', 'block'].includes(result)) {
+      c.tackles++;
+      e = Engine.ev(m, 'moment', si, { tackle: `Que desarme de ${Data.short(p)} em cima de ${an}!`, intercept: `${Data.short(p)} lê a jogada e intercepta o passe.`, block: `${Data.short(p)} se joga na frente e bloqueia o chute de ${an}!` }[result], p.id);
+    } else if (result === 'cover') {
+      e = Engine.ev(m, 'moment', si, 'A defesa se recompõe e afasta o perigo.');
+    } else if (result === 'foul') {
+      side.yellow[p.id] = (side.yellow[p.id] || 0) + 1;
+      if (side.yellow[p.id] >= 2) {
+        side.off.push(p.id); p.suspended = 2; c.mins = [];
+        e = Engine.ev(m, 'red', si, `Segundo amarelo! ${Data.short(p)} é expulso.`, p.id);
+      } else e = Engine.ev(m, 'yellow', si, `Falta dura de ${Data.short(p)}. Cartão amarelo.`, p.id);
+    } else if (result === 'conceded') {
+      m.score[1 - si]++; m.stats.shots[1 - si]++; m.stats.onT[1 - si]++;
+      if (atk) { w.players[atk].s.goals++; opp.ratings[atk] += 1; }
+      e = Engine.ev(m, 'goal', 1 - si, `Gol do ${w.teams[opp.id].name}! ${an} passa pela marcação e marca.`, atk);
+    } else {
+      m.stats.shots[1 - si]++;
+      if (result === 'saved') m.stats.onT[1 - si]++;
+      e = Engine.ev(m, result === 'saved' ? 'save' : 'miss', 1 - si, result === 'saved' ? `${an} finaliza e o goleiro defende.` : `${an} finaliza para fora.`, atk);
+    }
+    if (MatchView.addEvents) MatchView.addEvents([e]);
+  },
+
+  suppress(pos) { return { DEF: 0.8, MEI: 0.95, ATA: 1 }[pos]; },
 
   postMatch() {
     const c = PM.ctx, w = PM.w, p = PM.p, u = PM.u, m = c.m;
@@ -472,7 +621,7 @@ const PM = {
     UI.modal(`<h3>Fim de jogo</h3>
       <div class="final">${UI.badge(H)} ${U.esc(H.name)} <b>${c.fx.r[0]} - ${c.fx.r[1]}</b> ${U.esc(A.name)} ${UI.badge(A)}</div>
       ${lines.map(l => `<p>${l}</p>`).join('')}
-      ${played ? `<p class="muted small">Gols: ${c.goals} • Assistências: ${c.assists}</p>` : ''}
+      ${played ? `<p class="muted small">Gols: ${c.goals} • Assistências: ${c.assists} • Desarmes/cortes: ${c.tackles}</p>` : ''}
       <button class="btn primary" onclick="UI.closeModal();PM.afterMatch()">Continuar</button>`, { locked: true });
   },
 

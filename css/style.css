@@ -136,3 +136,11 @@ label.inline input { width: auto; margin: 0; }
   .attr { grid-template-columns: 90px 36px 1fr 80px; }
   .ratings { columns: 1; }
 }
+
+/* Peneira */
+.trial { max-width: 760px; margin: 0 auto; }
+.trial-list { margin: 0 0 10px; padding-left: 20px; color: var(--muted); }
+.trial-list li.cur { color: var(--gold); font-weight: 700; }
+.trial-list li.done { color: var(--text); }
+.grade { display: inline-block; min-width: 28px; text-align: center; border-radius: 6px; padding: 1px 6px; color: #fff; }
+.g-A { background: #1f9d5a; } .g-B { background: #5aa832; } .g-C { background: #b58a00; } .g-D { background: #c26a2d; } .g-E { background: #a52a2e; }
