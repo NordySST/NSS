@@ -758,6 +758,7 @@ const Kick = {
   },
 
   CR: 70, // raio da bola grande
+  MATE_RADIUS: 80, // distância em que o companheiro sai para buscar a bola
 
   // estado da bola grande no momento do toque, conforme ela chega
   contactBall(kind, bounce) {
@@ -986,6 +987,7 @@ const Kick = {
       b.vz = lift * (2.5 + pow * 5.5) + (drive ? 0 : 0.4) + volley * 1.2;
       b.moving = true;
       st.spin = -c.x * 3; st.bounce = 0;
+      st.mates.forEach(m => { m.chasing = false; });
       st.kickFrom = { x: b.x, y: b.y }; st.lastKicker = 'me';
       st.touches++; st.phase = 'flight'; st.owner = null;
       // você corre para um espaço depois de tocar a bola
@@ -1011,6 +1013,8 @@ const Kick = {
       setTimeout(() => { cancelAnimationFrame(st.raf); onDone({ result, passes: st.passes }); }, 1900);
     };
 
+    const pressure = (p) => Math.min(...st.defs.map(d => Math.hypot(d.x - p.x, d.y - p.y)), 300);
+
     // o companheiro (robô) decide o que fazer com a bola
     function mateDecide() {
       const m = st.holder;
@@ -1022,7 +1026,22 @@ const Kick = {
       });
       const dGoal = Math.hypot(320 - m.x, Kick.GOAL_Y - m.y);
       const canReturn = st.touches < sc.maxTouches;
-      const shoot = !canReturn || (dGoal < 190 && !blocked && Math.random() < 0.7) || (dGoal < 120 && Math.random() < 0.5);
+      const minDist = (p) => Math.min(...st.defs.map(d => Math.hypot(d.x - p.x, d.y - p.y)), 300);
+      const pressure = minDist(m), meOpen = minDist(st.me);
+      // pesos de cada opção conforme a situação
+      let wShoot = dGoal < 130 ? 3 : dGoal < 200 ? 1.6 : dGoal < 280 ? 0.5 : 0.12;
+      if (blocked) wShoot *= 0.35;
+      const wTab = canReturn ? (meOpen > 60 ? 1.7 : 0.6) * (st.me.y < m.y - 20 ? 1.3 : 0.8) : 0;
+      const wCarry = (m.carries || 0) < 2 && dGoal > 110 ? (pressure > 55 ? 1.2 : 0.3) : 0;
+      const choice = U.weighted(['shoot', 'tab', 'carry'], [wShoot, wTab, wCarry]);
+      if (choice === 'carry') {
+        m.carries = (m.carries || 0) + 1;
+        const ang = Math.atan2(90 - m.y, 320 - m.x) + U.rf(-0.5, 0.5);
+        st.mateCarry = { n: U.ri(35, 60), dx: Math.cos(ang), dy: Math.sin(ang) };
+        st.mateT = 25; st.msg = 'O companheiro avança com a bola'; st.msgT = 0;
+        return;
+      }
+      const shoot = choice === 'shoot';
       const b = st.ball;
       b.x = m.x; b.y = m.y - 12; b.z = 0;
       st.kickFrom = { x: b.x, y: b.y }; st.lastKicker = 'mate'; st.spin = 0;
@@ -1109,8 +1128,17 @@ const Kick = {
         const m = st.holder;
         const near = st.defs.reduce((a, d) => (Math.hypot(d.x - m.x, d.y - m.y) < Math.hypot(a.x - m.x, a.y - m.y) ? d : a), st.defs[0]);
         if (near) { near.x += U.clamp(m.x - near.x, -0.7, 0.7); near.y += U.clamp(m.y - near.y, -0.7, 0.7); }
+        if (st.mateCarry && st.mateCarry.n > 0) {
+          m.x = U.clamp(m.x + st.mateCarry.dx * 1.5, 30, Kick.W - 30); m.y = Math.max(70, m.y + st.mateCarry.dy * 1.5);
+          b.x = m.x; b.y = m.y - 12; st.mateCarry.n--;
+          if (near && Math.hypot(near.x - m.x, near.y - m.y) < 16) {
+            if (Math.random() < 0.3) return finish('blocked', 'A defesa roubou a bola do companheiro!');
+            near.x -= st.mateCarry.dx * 20; near.y -= 12;   // ele passa pelo marcador
+          }
+          return;
+        }
         st.mateT++;
-        if (st.mateT > 55) mateDecide();
+        if (st.mateT > (pressure(m) < 40 ? 35 : 55)) mateDecide();
         return;
       }
       if (!b.moving) return;
@@ -1137,12 +1165,26 @@ const Kick = {
         }
       }
       const far = Math.hypot(b.x - st.kickFrom.x, b.y - st.kickFrom.y) > 25;
+      // companheiros ficam na posição até a bola entrar no raio deles; aí vão ao encontro dela
+      if (st.lastKicker === 'me' && b.z < 30 && far) {
+        for (const m of st.mates) {
+          if (!m.chasing && Math.hypot(b.x - m.x, b.y - m.y) < Kick.MATE_RADIUS) m.chasing = true;
+          if (m.chasing) {
+            const v2 = b.vx * b.vx + b.vy * b.vy || 1;
+            const t = U.clamp(((m.x - b.x) * b.vx + (m.y - b.y) * b.vy) / v2, 0, 12);
+            const tx = b.x + b.vx * t, ty = b.y + b.vy * t + 12;
+            const dx = tx - m.x, dy = ty - m.y, d = Math.hypot(dx, dy);
+            if (d > 1) { m.x += dx / d * Math.min(2, d); m.y += dy / d * Math.min(2, d); }
+          }
+        }
+      }
       // companheiro recebe o seu passe
       if (st.lastKicker === 'me' && b.z < 18 && far) {
         for (const m of st.mates) {
           if (Math.hypot(b.x - m.x, b.y - m.y) < 18) {
             b.moving = false; b.vx = b.vy = b.vz = 0; b.z = 0; b.x = m.x; b.y = m.y - 12;
-            st.passes++; st.owner = 'mate'; st.holder = m; st.mateT = 0; st.phase = 'mate';
+            st.passes++; st.owner = 'mate'; st.holder = m; st.mateT = 0; st.phase = 'mate'; st.mateCarry = null;
+            st.mates.forEach(x => { x.chasing = false; });
             st.msg = 'Passe certo!'; st.msgT = 0; updInfo();
             return;
           }
