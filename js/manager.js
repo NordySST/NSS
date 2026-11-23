@@ -188,18 +188,20 @@ const MM = {
     const p = MM.w.players[id];
     const newWage = Math.round(p.wage * (p.morale > 60 ? 1.1 : 1.3) / 100) * 100;
     if (p.age >= 34 && Math.random() < 0.3) { UI.closeModal(); return UI.toast(`${Data.short(p)} prefere não renovar.`); }
-    if (!confirm(`${Data.short(p)} pede ${U.money(newWage)}/semana por 3 temporadas. Aceitar?`)) return;
-    p.wage = newWage; p.contract = 3; p.morale = Math.min(100, p.morale + 10);
-    UI.closeModal(); UI.toast('Contrato renovado.'); Save.save(); MM.hub();
+    UI.confirm(`${Data.short(p)} pede ${U.money(newWage)}/semana por 3 temporadas. Aceitar?`, () => {
+      p.wage = newWage; p.contract = 3; p.morale = Math.min(100, p.morale + 10);
+      UI.toast('Contrato renovado.'); Save.save(); MM.hub();
+    }, 'Renovar');
   },
   release(id) {
     const w = MM.w, t = MM.team, p = w.players[id];
     if (t.players.length <= 16) return UI.toast('Elenco mínimo de 16 jogadores.');
     const fee = p.wage * 8 * Math.max(1, p.contract);
-    if (!confirm(`Dispensar ${Data.short(p)} pagando ${U.money(fee)}?`)) return;
-    t.budget -= fee; MM.removeFromTeam(p);
-    p.teamId = null; w.freeAgents.push(p.id);
-    UI.closeModal(); Save.save(); MM.hub();
+    UI.confirm(`Dispensar ${Data.short(p)} pagando ${U.money(fee)}?`, () => {
+      t.budget -= fee; MM.removeFromTeam(p);
+      p.teamId = null; w.freeAgents.push(p.id);
+      Save.save(); MM.hub();
+    }, 'Dispensar');
   },
   removeFromTeam(p) {
     const t = MM.w.teams[p.teamId], g = MM.g;
@@ -371,10 +373,11 @@ const MM = {
   expandStadium() {
     const t = MM.team, c = MM.expandCost();
     if (t.budget < c) return UI.toast('Dinheiro insuficiente.');
-    if (!confirm(`Ampliar o estádio por ${U.money(c)}?`)) return;
-    t.budget -= c; t.stadium += 5000; MM.g.fin.seasonOut += c;
-    MM.g.fin.log.unshift({ t: 'Ampliação do estádio', v: -c });
-    Save.save(); MM.hub();
+    UI.confirm(`Ampliar o estádio por ${U.money(c)}?`, () => {
+      t.budget -= c; t.stadium += 5000; MM.g.fin.seasonOut += c;
+      MM.g.fin.log.unshift({ t: 'Ampliação do estádio', v: -c });
+      Save.save(); MM.hub();
+    }, 'Ampliar');
   },
 
   tab_tabela() {

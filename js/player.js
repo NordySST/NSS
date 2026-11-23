@@ -490,7 +490,7 @@ const PM = {
     const defOvr = U.avg(Engine.onPitch(m, opp).map(id => w.players[id].ovr));
     const types = {
       ATA: ['chance', 'chance', 'contra', 'longe', 'falta'],
-      MEI: ['passe', 'longe', 'contra', 'falta', 'chance'],
+      MEI: ['passe', 'passe', 'longe', 'contra', 'falta', 'chance', 'defesa'],
       DEF: ['defesa', 'defesa', 'defesa', 'defesa', 'passe', 'longe', 'falta'],
     }[p.pos];
     let type = U.pick(types);
@@ -694,8 +694,9 @@ const PM = {
   },
 
   retire(forced) {
-    if (!forced && !confirm('Encerrar a carreira? Isso finaliza este save.')) return;
-    PM.u.retired = true; Save.save(); PM.retiredScreen();
+    const go = () => { PM.u.retired = true; Save.save(); PM.retiredScreen(); };
+    if (forced) return go();
+    UI.confirm('Encerrar a carreira? Isso finaliza este save.', go, 'Encerrar');
   },
 
   retiredScreen() {

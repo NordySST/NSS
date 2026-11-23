@@ -93,14 +93,17 @@ const MatchView = {
       S.paused = !S.paused;
       $('mv-pause').textContent = S.paused ? '▶ Continuar' : '⏸ Pausar';
     };
-    $('mv-skip').onclick = () => {
-      if (opts.confirmSkip && !confirm(opts.confirmSkip)) return;
+    const doSkip = () => {
       clearInterval(S.timer);
       while (!m.done) {
         if (opts.hook && opts.hook(m, resume, $('mv-moment'), true)) continue;
         addEvents(Engine.step(w, m));
       }
       end();
+    };
+    $('mv-skip').onclick = () => {
+      if (S.waiting || S.ended) return;
+      if (opts.confirmSkip) UI.confirm(opts.confirmSkip, doSkip, 'Simular'); else doSkip();
     };
     MatchView.pause = (v) => { S.paused = v; $('mv-pause').textContent = S.paused ? '▶ Continuar' : '⏸ Pausar'; };
 

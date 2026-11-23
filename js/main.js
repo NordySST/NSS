@@ -13,6 +13,12 @@ const UI = {
     if (!opts.locked) d.addEventListener('click', e => { if (e.target === d) UI.closeModal(); });
     document.body.appendChild(d);
   },
+  // confirmação dentro da página (diálogos do navegador não funcionam em todo lugar)
+  confirm(msg, onYes, yesLabel = 'Confirmar') {
+    UI._onYes = onYes;
+    UI.modal(`<p>${U.esc(msg)}</p><div class="row"><button class="btn" onclick="UI.closeModal()">Cancelar</button>
+      <button class="btn primary" onclick="UI.closeModal();UI._onYes()">${yesLabel}</button></div>`);
+  },
   closeModal() { const m = document.getElementById('modal'); if (m) m.remove(); },
   toast(msg) {
     const t = document.createElement('div');
