@@ -12,11 +12,11 @@ const ATTR_W = {
 const TRIALS = {
   ATA: [
     { name: 'Finalização', type: 'chance', n: 3, attrs: ['chute', 'forca'], tip: 'faça o gol com o goleiro e a marcação na frente.' },
-    { name: 'Contra-ataque', type: 'contra', n: 2, attrs: ['velocidade', 'passe'], tip: 'toque para os companheiros e conclua a jogada.' },
-    { name: 'Bola parada', type: 'falta', n: 2, attrs: ['tecnica'], tip: 'use o efeito para contornar a barreira.' },
+    { name: 'Contra-ataque', type: 'contra', n: 2, attrs: ['velocidade', 'passe'], tip: 'passe para um companheiro: ele decide se finaliza ou devolve para você, que se desloca.' },
+    { name: 'Bola parada', type: 'falta', n: 2, attrs: ['tecnica'], tip: 'bata embaixo da bola para passar por cima da barreira, ou de lado para curvar.' },
   ],
   MEI: [
-    { name: 'Armação', type: 'passe', n: 3, attrs: ['passe', 'tecnica'], tip: 'encontre os companheiros e chegue ao gol. Cada passe certo vale pontos.' },
+    { name: 'Armação', type: 'passe', n: 3, attrs: ['passe', 'tecnica'], tip: 'passe para os companheiros e receba de volta mais perto do gol. Cada passe certo vale pontos.' },
     { name: 'Chute de fora', type: 'longe', n: 2, attrs: ['chute'], tip: 'finalize de fora da área.' },
     { name: 'Transição', type: 'contra', n: 2, attrs: ['velocidade'], tip: 'puxe o contra-ataque.' },
     { name: 'Recomposição', type: 'defesa', n: 1, attrs: ['resistencia', 'forca'], tip: 'volte para marcar e recupere a bola.' },

@@ -5,8 +5,10 @@ Jogo de futebol de carreira no navegador, com dois modos:
 - **Carreira de Jogador** — crie seu atleta (atacante, meia ou defensor) e passe por uma peneira com provas da sua
   posição, que define seus atributos iniciais e o clube que te contrata (Terceira ou Segunda Divisão). Depois,
   treine atributos, cuide da energia, da felicidade e do relacionamento com treinador, torcida e elenco,
-  compre equipamentos e bens, receba propostas de outros clubes e decida os lances das partidas
-  (arraste para trás a partir da bola e solte para chutar ou passar; use o efeito para curvar a bola).
+  compre equipamentos e bens, receba propostas de outros clubes e decida os lances das partidas.
+  No chute, você arrasta para trás a partir da bola e solta para mirar e dar força; depois toca no ponto
+  da bola onde quer bater (lado = efeito, embaixo = bola alta, em cima = rasteira forte). Você controla
+  só o seu jogador: depois de um passe, o companheiro decide sozinho entre finalizar ou devolver a bola.
   Defensores (e às vezes meias) também têm lances de marcação: segure e arraste para mover o jogador,
   encoste no atacante para dar o bote, fique na linha do passe para interceptar ou na frente do chute para bloquear.
 - **Carreira de Técnico** — assuma um clube, escolha formação e mentalidade, monte a escalação,
