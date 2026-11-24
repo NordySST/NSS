@@ -10,7 +10,10 @@ Jogo de futebol de carreira no navegador, com dois modos:
   dominada). No chute, você arrasta para trás a partir da bola e solta para mirar e dar força; depois toca
   no ponto da bola onde quer bater (lado = efeito, embaixo = bola alta, em cima = rasteira forte), com a
   bola em movimento. Se demorar, a marcação chega e te desarma. Você controla
-  só o seu jogador: depois de um passe, o companheiro decide sozinho entre finalizar ou devolver a bola.
+  só o seu jogador: depois de um passe, você arranca para um espaço à frente de quem recebeu, e o companheiro
+  decide sozinho entre finalizar, conduzir ou tabelar (só quando você está à frente dele, livre e com a linha
+  de passe desimpedida). Os treinos também são jogáveis: cada sessão tem 3 tentativas de um exercício ligado
+  ao atributo, e a evolução depende do seu desempenho.
   Defensores (e às vezes meias) também têm lances de marcação: segure e arraste para mover o jogador,
   encoste no atacante para dar o bote, fique na linha do passe para interceptar ou na frente do chute para bloquear.
 - **Carreira de Técnico** — assuma um clube, escolha formação e mentalidade, monte a escalação,

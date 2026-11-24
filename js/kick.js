@@ -15,6 +15,16 @@ const Kick = {
         .map(([k, v]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${v}</option>`).join('')}</select></label>`;
   },
 
+  // distância de um ponto p ao segmento a-b
+  segDist(p, a, b) {
+    const vx = b.x - a.x, vy = b.y - a.y, l2 = vx * vx + vy * vy || 1;
+    const t = U.clamp(((p.x - a.x) * vx + (p.y - a.y) * vy) / l2, 0, 1);
+    return Math.hypot(p.x - (a.x + vx * t), p.y - (a.y + vy * t));
+  },
+
+  // velocidade da sua corrida depois de tocar a bola (arrancada)
+  runSpeed(attrs) { return (1.2 + attrs.velocidade / 100 * 1.6) * 1.45; },
+
   CR: 70, // raio da bola grande
   MATE_RADIUS: 80, // distância em que o companheiro sai para buscar a bola
 
@@ -221,6 +231,12 @@ const Kick = {
       st.contactT = 0; st.phase = 'contact'; updInfo();
     });
 
+    const passTarget = (from, ang) => st.mates.find(m => {
+      const vx = m.x - from.x, vy = m.y - from.y;
+      if (Math.hypot(vx, vy) < 5) return false;
+      const a = Math.atan2(vy, vx);
+      return Math.abs(Math.atan2(Math.sin(a - ang), Math.cos(a - ang))) < 0.25;
+    });
     const isPassAim = (from, ang) => st.mates.some(m => {
       const vx = m.x - from.x, vy = m.y - from.y;
       if (Math.hypot(vx, vy) < 5) return false;
@@ -249,15 +265,18 @@ const Kick = {
       st.kickFrom = { x: b.x, y: b.y }; st.lastKicker = 'me';
       st.touches++; st.phase = 'flight'; st.owner = null;
       // você corre para um espaço depois de tocar a bola
-      st.me.run = pickRun();
+      st.me.run = pickRun(passTarget(b, s.ang));
       updInfo();
     }
 
     // escolhe um espaço livre mais perto do gol para o seu jogador se deslocar
-    function pickRun() {
+    // se o passe é para um companheiro, você corre para um espaço à frente dele
+    function pickRun(ref) {
       let best = null, bestScore = -1e9;
-      for (let i = 0; i < 24; i++) {
-        const x = U.rf(170, 470), y = U.rf(Math.max(90, st.me.y - 170), Math.max(100, st.me.y - 40));
+      const yMax = ref ? Math.max(90, ref.y - 50) : Math.max(100, st.me.y - 40);
+      const yMin = ref ? Math.max(80, ref.y - 190) : Math.max(90, st.me.y - 170);
+      for (let i = 0; i < 30; i++) {
+        const x = U.rf(150, 490), y = U.rf(Math.min(yMin, yMax - 10), yMax);
         const free = Math.min(...st.defs.map(d => Math.hypot(d.x - x, d.y - y)), 200);
         const score = free * 1.2 - Math.hypot(x - 320, y - 60) * 0.6 - Math.hypot(x - st.me.x, y - st.me.y) * 0.2;
         if (score > bestScore) { bestScore = score; best = { x, y }; }
@@ -272,6 +291,20 @@ const Kick = {
     };
 
     const pressure = (p) => Math.min(...st.defs.map(d => Math.hypot(d.x - p.x, d.y - p.y)), 300);
+    const PASS_SP = 8;
+    // onde você vai estar quando um passe saindo de "from" chegar até você
+    function leadPoint(from) {
+      const me = st.me, mySp = Kick.runSpeed(attrs);
+      let lead = { x: me.x, y: me.y - 10 };
+      for (let k = 0; k < 4; k++) {
+        const t = Math.hypot(lead.x - from.x, lead.y - from.y) / (PASS_SP * 0.9);
+        if (!me.run) break;
+        const rx = me.run.x - me.x, ry = me.run.y - me.y, rd = Math.hypot(rx, ry);
+        const go = Math.min(rd, mySp * t);
+        lead = rd > 1 ? { x: me.x + rx / rd * go, y: me.y + ry / rd * go - 10 } : { x: me.x, y: me.y - 10 };
+      }
+      return lead;
+    }
 
     // o companheiro (robô) decide o que fazer com a bola
     function mateDecide() {
@@ -289,9 +322,22 @@ const Kick = {
       // pesos de cada opção conforme a situação
       let wShoot = dGoal < 130 ? 3 : dGoal < 200 ? 1.6 : dGoal < 280 ? 0.5 : 0.12;
       if (blocked) wShoot *= 0.35;
-      const wTab = canReturn ? (meOpen > 60 ? 1.7 : 0.6) * (st.me.y < m.y - 20 ? 1.3 : 0.8) : 0;
+      // tabela só faz sentido se você estiver à frente dele (mais perto do gol), perto,
+      // livre de marcação e com a linha do passe desimpedida
+      const L = leadPoint(m);   // ponto onde a bola encontraria você
+      const meGoal = Math.hypot(320 - L.x, Kick.GOAL_Y - L.y);
+      const meDist = Math.hypot(L.x - m.x, L.y - m.y);
+      const ahead = L.y < m.y - 30 && meGoal < dGoal - 30;
+      const laneClear = !st.defs.some(d => Kick.segDist(d, m, L) < 22);
+      const tabOk = canReturn && ahead && meDist < 230 && meDist > 40 && minDist(L) > 45 && laneClear;
+      const wTab = tabOk ? 0.9 + (dGoal - meGoal) / 80 + (minDist(L) > 80 ? 0.5 : 0) : 0;
+      void meOpen;
       const wCarry = (m.carries || 0) < 2 && dGoal > 110 ? (pressure > 55 ? 1.2 : 0.3) : 0;
-      const choice = U.weighted(['shoot', 'tab', 'carry'], [wShoot, wTab, wCarry]);
+      // se você ainda está correndo para se posicionar, ele pode segurar a bola um pouco
+      const runAhead = st.me.run && st.me.run.y < m.y - 30;
+      const wHold = !tabOk && canReturn && runAhead && pressure > 40 && (m.holds || 0) < 3 ? 3 : 0;
+      const choice = U.weighted(['shoot', 'tab', 'carry', 'hold'], [wShoot, wTab, wCarry, wHold]);
+      if (choice === 'hold') { m.holds = (m.holds || 0) + 1; st.mateT = 20; return; }
       if (choice === 'carry') {
         m.carries = (m.carries || 0) + 1;
         const ang = Math.atan2(90 - m.y, 320 - m.x) + U.rf(-0.5, 0.5);
@@ -309,18 +355,9 @@ const Kick = {
         b.vx = Math.cos(ang) * sp; b.vy = Math.sin(ang) * sp; b.vz = blocked ? 3 : 0.4;
         st.msg = 'O companheiro finaliza!'; st.msgT = 0;
       } else {
-        const me = st.me;
         // passe na frente: onde você vai estar quando a bola chegar
-        const mySp = 1.2 + attrs.velocidade / 100 * 1.6;
-        const sp = 8;
-        let lead = { x: me.x, y: me.y - 10 };
-        for (let k = 0; k < 4; k++) {
-          const t = Math.hypot(lead.x - b.x, lead.y - b.y) / (sp * 0.9);
-          if (!me.run) break;
-          const rx = me.run.x - me.x, ry = me.run.y - me.y, rd = Math.hypot(rx, ry);
-          const go = Math.min(rd, mySp * t);
-          lead = rd > 1 ? { x: me.x + rx / rd * go, y: me.y + ry / rd * go - 10 } : { x: me.x, y: me.y - 10 };
-        }
+        const sp = PASS_SP;
+        const lead = leadPoint(b);
         const laneBlocked = st.defs.some(df => Math.hypot(df.x - (b.x + lead.x) / 2, df.y - (b.y + lead.y) / 2) < 30);
         const ang = Math.atan2(lead.y - b.y, lead.x - b.x) + U.gauss(0, 0.05);
         b.vx = Math.cos(ang) * sp; b.vy = Math.sin(ang) * sp; b.vz = laneBlocked ? 3.2 : 0;
@@ -341,7 +378,7 @@ const Kick = {
         st.me.run = { x: b.x + b.vx * t, y: b.y + b.vy * t + 14 };
       }
       if (st.me.run && !st.over) {
-        const sp = 1.2 + attrs.velocidade / 100 * 1.6;
+        const sp = Kick.runSpeed(attrs);
         const dx = st.me.run.x - st.me.x, dy = st.me.run.y - st.me.y, d = Math.hypot(dx, dy);
         if (d > 1) { st.me.x += dx / d * Math.min(sp, d); st.me.y += dy / d * Math.min(sp, d); }
       }

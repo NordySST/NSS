@@ -29,6 +29,16 @@ const TRIALS = {
   ],
 };
 
+// Exercício de cada treino (usa o mesmo minijogo das partidas)
+const TRAIN_DRILLS = {
+  chute: { name: 'Finalização', type: 'chance', n: 3, tip: 'faça o gol. Bater no canto e com força conta.' },
+  passe: { name: 'Troca de passes', type: 'passe', n: 3, tip: 'passe para os companheiros e chegue ao gol. Cada passe certo vale pontos.' },
+  tecnica: { name: 'Bola parada', type: 'falta', n: 3, tip: 'escolha bem o ponto da bola: embaixo para passar a barreira, de lado para curvar.' },
+  velocidade: { name: 'Contra-ataque', type: 'contra', n: 3, tip: 'decida rápido antes que a marcação chegue e conclua a jogada.' },
+  forca: { name: 'Disputa de bola', type: 'defesa', n: 3, tip: 'encoste no atacante para dar o bote e recupere a bola.' },
+  resistencia: { name: 'Marcação contínua', type: 'defesa', n: 3, tip: 'acompanhe a jogada sem perder o fôlego.' },
+};
+
 const SHOP = [
   { id: 'chut1', cat: 'Equipamento', name: 'Chuteira de treino', price: 6000, desc: '+2 Chute', fx: { chute: 2 } },
   { id: 'chut2', cat: 'Equipamento', name: 'Chuteira profissional', price: 45000, desc: '+3 Chute, +2 Técnica', fx: { chute: 3, tecnica: 2 } },
@@ -295,31 +305,85 @@ const PM = {
   tab_treino() {
     const u = PM.u;
     return `<div class="panel"><h3>Treino</h3>
-      <p class="muted small">Cada sessão custa 20 de energia. Energia atual: <b>${Math.round(u.energia)}</b>. Quanto mais alto o atributo, mais devagar ele evolui.</p>
+      <p class="muted small">Cada sessão é um exercício com 3 tentativas e custa 20 de energia. Quanto melhor você jogar, mais o atributo evolui; quanto mais alto ele já for, mais devagar sobe. Energia atual: <b>${Math.round(u.energia)}</b>.</p>
       <div class="attr-list">${Object.entries(ATTRS).map(([k, v]) => `
         <div class="attr">
           <div class="attr-name">${v}</div>
           <div class="attr-val ${UI.ovrCls(u.attrs[k])}">${u.attrs[k]}</div>
           <div class="attr-xp">${UI.bar((u.xp[k] || 0) * 100, 100, 'thin')}</div>
-          <button class="btn sm" ${u.energia < 20 ? 'disabled' : ''} onclick="PM.train('${k}')">Treinar</button>
+          <button class="btn sm" ${u.energia < 20 ? 'disabled' : ''} onclick="PM.train('${k}')" title="${TRAIN_DRILLS[k].name}">Treinar</button>
         </div>`).join('')}</div>
       <p class="muted small">Pesos no seu geral (${POS_NAMES[PM.p.pos]}): ${Object.entries(ATTR_W[PM.p.pos]).map(([k, v]) => ATTRS[k] + ' ' + Math.round(v * 100) + '%').join(' • ')}</p>
     </div>`;
   },
 
+  // ---------- Treino jogável: o ganho depende do seu desempenho ----------
   train(k) {
     const u = PM.u;
     if (u.energia < 20) return UI.toast('Sem energia. Descanse.');
     u.energia -= 20;
+    Save.save();
+    PM.session = { k, d: TRAIN_DRILLS[k], scores: [] };
+    PM.trainStep();
+  },
+
+  trainStep() {
+    const S = PM.session, d = S.d, u = PM.u;
+    if (S.scores.length >= d.n) return PM.trainResult();
+    UI.screen(`
+      <div class="trial">
+        <div class="panel"><h2>Treino de ${ATTRS[S.k]} — ${d.name}</h2>
+          <p><b>Tentativa ${S.scores.length + 1}/${d.n}:</b> ${d.tip}</p>
+          <p class="muted small">Quanto melhor você for no exercício, mais o atributo evolui. Notas até agora: ${S.scores.map(v => `<b class="grade g-${PM.grade(v)}">${PM.grade(v)}</b>`).join(' ') || '-'}</p>
+          <button class="btn sm" onclick="PM.trainQuit()">Encerrar treino</button>
+        </div>
+        <div id="trial-host"></div>
+      </div>`);
+    const host = document.getElementById('trial-host');
+    // os adversários do treino têm o nível do seu elenco
+    const lvl = Math.round(U.avg(PM.team.players.map(id => PM.w.players[id].ovr)));
+    const attrs = { ...u.attrs, energia: Math.max(30, u.energia) };
+    const done = (r) => {
+      if (PM.session !== S) return;
+      S.scores.push(PM.trialScore(r));
+      PM.trainStep();
+    };
+    if (d.type === 'defesa') Defend.start(host, Defend.scenario(lvl, lvl), attrs, done);
+    else Kick.start(host, Kick.scenario(d.type, lvl, lvl), attrs, done);
+  },
+
+  trainQuit() {
+    const S = PM.session;
+    // para a animação do exercício que estava rodando
+    [Kick._st, Defend._st].forEach(st => { if (st) { st.over = true; cancelAnimationFrame(st.raf); } });
+    S.played = S.scores.length;
+    while (S.scores.length < S.d.n) S.scores.push(0);
+    PM.trainResult();
+  },
+
+  trainResult() {
+    const S = PM.session, u = PM.u, k = S.k;
+    PM.session = null;
+    const perf = U.avg(S.scores);
     const v = u.attrs[k];
     const ageF = PM.p.age <= 21 ? 1.3 : PM.p.age <= 26 ? 1 : PM.p.age <= 30 ? 0.7 : 0.4;
-    let gain = U.rf(0.25, 0.6) * ageF * (u.items.includes('trainer') ? 1.3 : 1) * Math.max(0.15, (100 - v) / 55);
+    // desempenho fraco quase não rende; desempenho ótimo rende bem mais
+    const played = S.played ?? S.scores.length;
+    const gain = played === 0 ? 0 : (0.05 + 0.95 * Math.pow(perf, 1.5)) * 0.9 * ageF * (u.items.includes('trainer') ? 1.3 : 1) * Math.max(0.15, (100 - v) / 55);
     u.xp[k] = (u.xp[k] || 0) + gain;
     let up = 0;
     while (u.xp[k] >= 1 && u.attrs[k] < 99) { u.xp[k] -= 1; u.attrs[k]++; up++; }
-    u.rel.tecnico = Math.min(100, u.rel.tecnico + 1);
-    UI.toast(up ? `${ATTRS[k]} subiu para ${u.attrs[k]}!` : `Treino de ${ATTRS[k]} concluído.`);
-    Save.save(); PM.hub();
+    const relD = perf >= 0.6 ? 2 : perf < 0.3 ? -1 : 1;
+    u.rel.tecnico = U.clamp(u.rel.tecnico + relD, 0, 100);
+    Save.save();
+    PM.hub('treino');
+    UI.modal(`<h3>Fim do treino</h3>
+      <div class="kv"><span>Desempenho</span><b class="grade g-${PM.grade(perf)}">${PM.grade(perf)}</b></div>
+      <div class="kv"><span>Evolução de ${ATTRS[k]}</span><b>+${Math.round(gain * 100)}% de uma barra</b></div>
+      ${up ? `<p class="o-good"><b>${ATTRS[k]} subiu para ${u.attrs[k]}!</b></p>` : ''}
+      <div class="kv"><span>Treinador</span><b>${relD > 0 ? '+' : ''}${relD}</b></div>
+      <p class="muted small">${perf >= 0.6 ? 'O treinador gostou do que viu.' : perf < 0.3 ? 'Treino fraco. O treinador ficou de olho.' : 'Treino razoável.'}</p>
+      <button class="btn primary" onclick="UI.closeModal()">OK</button>`);
   },
 
   rest() {
