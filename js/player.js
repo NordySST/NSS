@@ -34,7 +34,7 @@ const TRAIN_DRILLS = {
   chute: { name: 'Finalização', type: 'chance', n: 3, tip: 'faça o gol. Bater no canto e com força conta.' },
   passe: { name: 'Troca de passes', type: 'passe', n: 3, tip: 'passe para os companheiros e chegue ao gol. Cada passe certo vale pontos.' },
   tecnica: { name: 'Bola parada', type: 'falta', n: 3, tip: 'escolha bem o ponto da bola: embaixo para passar a barreira, de lado para curvar.' },
-  velocidade: { name: 'Contra-ataque', type: 'contra', n: 3, tip: 'decida rápido antes que a marcação chegue e conclua a jogada.' },
+  velocidade: { name: 'Slalom de cones', type: 'cones', n: 3, tip: 'segure e arraste o dedo para conduzir a bola entre os cones até a chegada, passando pelo lado da seta verde.' },
   forca: { name: 'Disputa de bola', type: 'defesa', n: 3, tip: 'encoste no atacante para dar o bote e recupere a bola.' },
   resistencia: { name: 'Marcação contínua', type: 'defesa', n: 3, tip: 'acompanhe a jogada sem perder o fôlego.' },
 };
@@ -177,6 +177,7 @@ const PM = {
       goal: 1, assist: 0.85, saved: 0.4, blocked: 0.2, miss: 0.15,
       tackle: 1, intercept: 1, block: 0.9, cover: 0.5, wide: 0.45, foul: 0.15, conceded: 0,
     };
+    if (typeof r.score === 'number') return r.score;
     let v = map[r.result] ?? 0.2;
     if (r.passes) v = Math.min(1, v + r.passes * 0.15);
     return v;
@@ -346,16 +347,18 @@ const PM = {
     const done = (r) => {
       if (PM.session !== S) return;
       S.scores.push(PM.trialScore(r));
+      if (r.time) (S.times = S.times || []).push(r.time);
       PM.trainStep();
     };
     if (d.type === 'defesa') Defend.start(host, Defend.scenario(lvl, lvl), attrs, done);
+    else if (d.type === 'cones') Cones.start(host, Cones.scenario(), attrs, done);
     else Kick.start(host, Kick.scenario(d.type, lvl, lvl), attrs, done);
   },
 
   trainQuit() {
     const S = PM.session;
     // para a animação do exercício que estava rodando
-    [Kick._st, Defend._st].forEach(st => { if (st) { st.over = true; cancelAnimationFrame(st.raf); } });
+    [Kick._st, Defend._st, Cones._st].forEach(st => { if (st) { st.over = true; cancelAnimationFrame(st.raf); } });
     S.played = S.scores.length;
     while (S.scores.length < S.d.n) S.scores.push(0);
     PM.trainResult();
@@ -380,6 +383,7 @@ const PM = {
     UI.modal(`<h3>Fim do treino</h3>
       <div class="kv"><span>Desempenho</span><b class="grade g-${PM.grade(perf)}">${PM.grade(perf)}</b></div>
       <div class="kv"><span>Evolução de ${ATTRS[k]}</span><b>+${Math.round(gain * 100)}% de uma barra</b></div>
+      ${S.times ? `<div class="kv"><span>Melhor tempo</span><b>${Math.min(...S.times).toFixed(2)} s</b></div>` : ''}
       ${up ? `<p class="o-good"><b>${ATTRS[k]} subiu para ${u.attrs[k]}!</b></p>` : ''}
       <div class="kv"><span>Treinador</span><b>${relD > 0 ? '+' : ''}${relD}</b></div>
       <p class="muted small">${perf >= 0.6 ? 'O treinador gostou do que viu.' : perf < 0.3 ? 'Treino fraco. O treinador ficou de olho.' : 'Treino razoável.'}</p>

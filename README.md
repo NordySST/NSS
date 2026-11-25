@@ -37,6 +37,7 @@ Abra `index.html` no navegador. Não precisa instalar nada. O progresso fica sal
 | `js/engine.js` | Simulação das partidas, rodadas e fim de temporada |
 | `js/kick.js` | Minijogo dos lances de ataque (física da bola, goleiro, defensores) |
 | `js/defend.js` | Minijogo dos lances de marcação (desarme, interceptação, bloqueio) |
+| `js/cones.js` | Treino de velocidade: slalom entre cones conduzindo a bola com o dedo |
 | `js/matchview.js` | Tela de partida ao vivo (campo, narração, estatísticas) |
 | `js/player.js` | Modo Carreira de Jogador |
 | `js/manager.js` | Modo Carreira de Técnico |
