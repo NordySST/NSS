@@ -2,21 +2,33 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0b1420">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="manifest.webmanifest">
   <title>Rumo à Glória</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="src/ui/style.css">
 </head>
 <body>
-  <div id="app"></div>
-  <script src="js/util.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/engine.js"></script>
-  <script src="js/kick.js"></script>
-  <script src="js/defend.js"></script>
-  <script src="js/cones.js"></script>
-  <script src="js/matchview.js"></script>
-  <script src="js/main.js"></script>
-  <script src="js/player.js"></script>
-  <script src="js/manager.js"></script>
+  <div id="stage"></div>
+  <div id="rotate" hidden><span>📱</span><span class="rot">↻</span></div>
+  <!-- ordem de carga: dados -> núcleo -> sistemas -> minigames -> partida -> interface -->
+  <script src="src/data/balance.js"></script>
+  <script src="src/data/clubs.js"></script>
+  <script src="src/data/i18n.js"></script>
+  <script src="src/core/rng.js"></script>
+  <script src="src/core/state.js"></script>
+  <script src="src/save/save.js"></script>
+  <script src="src/systems/league.js"></script>
+  <script src="src/systems/energy.js"></script>
+  <script src="src/systems/skills.js"></script>
+  <script src="src/systems/progression.js"></script>
+  <script src="src/systems/match.js"></script>
+  <script src="src/minigames/engine.js"></script>
+  <script src="src/minigames/training.js"></script>
+  <script src="src/match/moments.js"></script>
+  <script src="src/ui/ui.js"></script>
+  <script src="src/ui/screens.js"></script>
+  <script src="src/main.js"></script>
 </body>
 </html>

@@ -1,44 +1,48 @@
 # Rumo à Glória
 
-Jogo de futebol de carreira no navegador, com dois modos:
+Jogo de carreira de futebol para celular: você controla **um único atleta**, começa aos 16 anos num clube
+semiprofissional da divisão mais baixa e tenta virar uma estrela. Tela cheia, paisagem, quase sem texto
+(ícones, barras e números) e botão **?** com ajuda em todas as telas. Todos os clubes e marcas são fictícios.
 
-- **Carreira de Jogador** — crie seu atleta (atacante, meia ou defensor) e passe por uma peneira com provas da sua
-  posição, que define seus atributos iniciais e o clube que te contrata (Terceira ou Segunda Divisão). Depois,
-  treine atributos, cuide da energia, da felicidade e do relacionamento com treinador, torcida e elenco,
-  compre equipamentos e bens, receba propostas de outros clubes e decida os lances das partidas.
-  A bola chega até você de jeitos diferentes, conforme o lance (rasteira, quicando, cruzamento pelo alto ou
-  dominada). No chute, você arrasta para trás a partir da bola e solta para mirar e dar força; depois toca
-  no ponto da bola onde quer bater (lado = efeito, embaixo = bola alta, em cima = rasteira forte), com a
-  bola em movimento. Se demorar, a marcação chega e te desarma. Você controla
-  só o seu jogador: depois de um passe, você arranca para um espaço à frente de quem recebeu, e o companheiro
-  decide sozinho entre finalizar, conduzir ou tabelar (só quando você está à frente dele, livre e com a linha
-  de passe desimpedida). Os treinos também são jogáveis: cada sessão tem 3 tentativas de um exercício ligado
-  ao atributo, e a evolução depende do seu desempenho.
-  Defensores (e às vezes meias) também têm lances de marcação: segure e arraste para mover o jogador,
-  encoste no atacante para dar o bote, fique na linha do passe para interceptar ou na frente do chute para bloquear.
-- **Carreira de Técnico** — assuma um clube, escolha formação e mentalidade, monte a escalação,
-  faça substituições durante o jogo, compre e venda jogadores, renove contratos, cuide das finanças
-  (bilheteria, salários, cota de TV, estádio) e atenda às expectativas da diretoria.
+## Status: Fase 1 (núcleo)
 
-São 30 clubes fictícios em 3 divisões (turno e returno, 2 sobem e 2 caem), com jogadores que envelhecem,
-evoluem e se aposentam a cada temporada.
+- Criação do jogador (nome, gênero, país, aparência, posição)
+- Hub com Star Rating, dinheiro, energia, relacionamentos (técnico, time, torcida) e próximo jogo
+- Energia: treino custa 40%, recuperação de 25% após cada partida, abaixo de 45% começa no banco
+- 5 treinos (minigames) com 3 tentativas e estrelas: Velocidade, Força, Técnica, Visão e Bola parada;
+  vento a partir do nível 15, teto suave em 30, declínio de habilidade sem treino, modo Prática
+- Controle de chute: arrastar a partir da bola (direção e força, com trajetória pontilhada) → soltar →
+  tocar na barra de efeito para curvar
+- Partida simulada com linha do tempo de ícones, esquema (⚔ ⚖ 🛡), empenho (1–3 ❤), intervalo e
+  lances jogáveis: interceptação, passe no meio-campo (com classificação Simples/Bom/Ótimo/Espetacular,
+  impedimento visível com Visão 25+) e jogada de ataque
+- Fim de jogo: nota (estrelas), Craque do Jogo, reação de técnico/time/torcida, pagamento animado, manchete
+- Star Rating sobe com a combinação de técnico + time + torcida
+- Liga com 4 divisões × 18 clubes, turno e returno, acesso/rebaixamento de 3
+- 3 slots de save (versionado), PWA instalável e offline
+
+As fases seguintes (relacionamentos e contrato, economia e vida, profundidade, polimento) seguem a especificação.
 
 ## Como jogar
 
-Abra `index.html` no navegador. Não precisa instalar nada. O progresso fica salvo no próprio navegador
-(um save para cada modo).
+- **No navegador:** abra `index.html` (ou sirva a pasta por HTTP para usar como PWA instalável/offline).
+- **Arquivo único:** `python3 tools/build.py` gera `dist/rumo-a-gloria.html`.
+
+## Testes
+
+`npm test` (ou `node --test tests/*.test.js`) roda os testes unitários dos sistemas: energia, ganho de
+habilidade, declínio, pagamento, Star Rating, classificação de passe, tabela e calendário da liga, e uma
+simulação de 10 partidas.
 
 ## Estrutura
 
-| Arquivo | Conteúdo |
+| Pasta | Conteúdo |
 |---|---|
-| `js/util.js` | Funções auxiliares e nomes |
-| `js/data.js` | Clubes, ligas, geração de jogadores e tabela |
-| `js/engine.js` | Simulação das partidas, rodadas e fim de temporada |
-| `js/kick.js` | Minijogo dos lances de ataque (física da bola, goleiro, defensores) |
-| `js/defend.js` | Minijogo dos lances de marcação (desarme, interceptação, bloqueio) |
-| `js/cones.js` | Treino de velocidade: slalom entre cones conduzindo a bola com o dedo |
-| `js/matchview.js` | Tela de partida ao vivo (campo, narração, estatísticas) |
-| `js/player.js` | Modo Carreira de Jogador |
-| `js/manager.js` | Modo Carreira de Técnico |
-| `js/main.js` | Menu, interface base e salvamento |
+| `src/data` | `balance.js` (todos os números do jogo), clubes/países, textos pt-BR e ajuda |
+| `src/core` | RNG com semente, estado do jogo (`GameState`) |
+| `src/save` | Save versionado com 3 slots |
+| `src/systems` | Energia, habilidades, liga, partida, nota/relacionamentos/Star Rating/pagamento |
+| `src/minigames` | Física da bola, controle de chute e os 5 treinos |
+| `src/match` | Lances jogáveis da partida |
+| `src/ui` | Palco 16:9, componentes, ajuda "?", som e telas |
+| `tests` | Testes unitários (node:test) |

@@ -1,0 +1,9 @@
+{
+  "name": "rumo-a-gloria",
+  "private": true,
+  "description": "Jogo de carreira de futebol (um jogador) para celular, em paisagem e tela cheia.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "build": "python3 tools/build.py"
+  }
+}
